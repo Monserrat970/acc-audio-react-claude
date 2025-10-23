@@ -1,9 +1,18 @@
 import { useState, useEffect, useRef } from "react";
-
 import { ArrowLeftToLine } from "lucide-react";
 
 const AcceleratingMusicPlayer = () => {
-  const [currentTrack, setCurrentTrack] = useState(null);
+  //  Static playlist of local songs (in /public/audio)
+  const playlist = [
+    { title: "Sunny Morning", src: "/audio/sunny-morning.mp3" },
+    { title: "Lo-Fi Breeze", src: "/audio/lofi-breeze.mp3" },
+    { title: "Chill Drive", src: "/audio/chill-drive.mp3" },
+  ];
+
+  // 🎛️ State variables
+  const [trackIndex, setTrackIndex] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState(playlist[0]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -15,10 +24,26 @@ const AcceleratingMusicPlayer = () => {
   const audioRef = useRef(null);
   const speedIntervalRef = useRef(null);
 
-  // Start speed acceleration interval
+  // ⚙️ Automatically load the correct song when trackIndex changes
+  useEffect(() => {
+    if (!audioRef.current) return;
+
+    //  THIS is the key line that sets which song file to load:
+    audioRef.current.src = playlist[trackIndex].src;
+
+    setCurrentTrack(playlist[trackIndex]);
+    setCurrentTime(0);
+    audioRef.current.playbackRate = startSpeed;
+    setPlaybackSpeed(startSpeed);
+
+    if (isPlaying) {
+      audioRef.current.play().catch(() => setIsPlaying(false));
+    }
+  }, [trackIndex]);
+
+  // 🚀 Acceleration logic (keep your existing code)
   useEffect(() => {
     if (isPlaying) {
-      // Clear any existing interval first
       if (speedIntervalRef.current) {
         clearInterval(speedIntervalRef.current);
       }
@@ -49,29 +74,16 @@ const AcceleratingMusicPlayer = () => {
     };
   }, [isPlaying, startSpeed, maxSpeed, acceleration]);
 
-  // Handle file upload
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const url = URL.createObjectURL(file);
-    setCurrentTrack({
-      name: file.name.replace(/\.[^/.]+$/, ""),
-      fileName: file.name,
-      url: url,
-    });
-
-    if (audioRef.current) {
-      audioRef.current.src = url;
-    }
+  // 🔊 Mute/Unmute
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    audioRef.current.muted = !audioRef.current.muted;
+    setIsMuted(audioRef.current.muted);
   };
 
-  // Handle play/pause
+  // ▶️ Play / Pause
   const togglePlay = () => {
-    if (!currentTrack) {
-      alert("Please select an audio file first!");
-      return;
-    }
+    if (!audioRef.current) return;
 
     if (isPlaying) {
       audioRef.current.pause();
@@ -82,7 +94,18 @@ const AcceleratingMusicPlayer = () => {
     }
   };
 
-  // Seek backward/forward
+  // ⏮ / ⏭ Track navigation
+  const nextTrack = () => {
+    setTrackIndex((prev) => (prev + 1) % playlist.length);
+    setIsPlaying(true);
+  };
+
+  const prevTrack = () => {
+    setTrackIndex((prev) => (prev - 1 + playlist.length) % playlist.length);
+    setIsPlaying(true);
+  };
+
+  // ⏩ / ⏪ Seek
   const seekBackward = () => {
     if (audioRef.current) {
       audioRef.current.currentTime = Math.max(0, currentTime - 10);
@@ -95,7 +118,30 @@ const AcceleratingMusicPlayer = () => {
     }
   };
 
-  // Format time display
+  // ⌨️ Keyboard shortcuts
+  useEffect(() => {
+    const handleKey = (e) => {
+      const key = e.key.toLowerCase();
+      if (key === " ") {
+        e.preventDefault();
+        togglePlay();
+      } else if (key === "m") {
+        toggleMute();
+      } else if (key === "n") {
+        nextTrack();
+      } else if (key === "p") {
+        prevTrack();
+      } else if (key === "arrowright") {
+        seekForward();
+      } else if (key === "arrowleft") {
+        seekBackward();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isPlaying, trackIndex, isMuted]);
+
+  // 🎚️ Helpers
   const formatTime = (seconds) => {
     if (isNaN(seconds)) return "0:00";
     const minutes = Math.floor(seconds / 60);
@@ -103,7 +149,6 @@ const AcceleratingMusicPlayer = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-  // Audio event handlers
   const handleLoadedMetadata = () => {
     setDuration(audioRef.current.duration);
     audioRef.current.playbackRate = startSpeed;
@@ -122,6 +167,7 @@ const AcceleratingMusicPlayer = () => {
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  // 🎨 UI
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 p-4">
       <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-10 shadow-2xl border border-white/20 max-w-xl w-full">
@@ -129,32 +175,13 @@ const AcceleratingMusicPlayer = () => {
           🚀 Accelerating Player
         </h1>
 
-        {/* File Input */}
-        <div className="mb-8 text-center">
-          <label
-            htmlFor="audioFile"
-            className="inline-block px-8 py-4 bg-gradient-to-r from-red-500 to-orange-600 rounded-full cursor-pointer hover:translate-y-[-2px] hover:shadow-lg transition-all font-bold uppercase tracking-wider text-white"
-          >
-            Choose Music File
-          </label>
-          <input
-            type="file"
-            id="audioFile"
-            className="hidden"
-            accept="audio/*"
-            onChange={handleFileChange}
-          />
-        </div>
-
-        {/* Track Info */}
+        {/* Current Track Info */}
         <div className="mb-8 min-h-[60px] text-center">
           <div className="text-xl font-bold text-white mb-1">
-            {currentTrack ? currentTrack.name : "No track selected"}
+            {currentTrack.title}
           </div>
           <div className="text-sm text-white/80">
-            {currentTrack
-              ? `File: ${currentTrack.fileName}`
-              : "Select an audio file to begin"}
+            Track {trackIndex + 1} of {playlist.length}
           </div>
         </div>
 
@@ -173,26 +200,30 @@ const AcceleratingMusicPlayer = () => {
         </div>
 
         {/* Controls */}
-        <div className="flex justify-center gap-5 mb-8">
-          <button
-            onClick={seekBackward}
-            className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 text-white text-xl hover:scale-110 transition-transform shadow-lg"
-          >
-            <ArrowLeftToLine />
+        <div className="flex justify-center gap-5 mb-6">
+          <button onClick={prevTrack} className="player-btn text-white text-xl">
+            ⏮
           </button>
           <button
             onClick={togglePlay}
-            className={`w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 text-white text-2xl hover:scale-110 transition-transform shadow-lg ${
+            className={`player-btn w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 text-white text-2xl hover:scale-110 transition-transform shadow-lg ${
               isPlaying ? "animate-pulse" : ""
             }`}
           >
             {isPlaying ? "⏸" : "▶"}
           </button>
-          <button
-            onClick={seekForward}
-            className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 text-white text-xl hover:scale-110 transition-transform shadow-lg"
-          >
+          <button onClick={nextTrack} className="player-btn text-white text-xl">
             ⏭
+          </button>
+        </div>
+
+        {/* Mute Button */}
+        <div className="flex justify-center mb-6">
+          <button
+            onClick={toggleMute}
+            className="px-6 py-3 rounded-full bg-white/20 text-white hover:bg-white/30 transition"
+          >
+            {isMuted ? "🔈 Unmute" : "🔇 Mute"}
           </button>
         </div>
 
@@ -205,34 +236,6 @@ const AcceleratingMusicPlayer = () => {
             <p>Speed increases as the song progresses.</p>
             <p>The longer you listen, the faster it gets!</p>
           </div>
-        </div>
-
-        {/* Settings */}
-        <div className="bg-white/10 rounded-2xl p-6 space-y-4">
-          <SettingRow
-            label="Start Speed:"
-            value={startSpeed}
-            onChange={(e) => setStartSpeed(parseFloat(e.target.value))}
-            min="0.5"
-            max="2.0"
-            step="0.1"
-          />
-          <SettingRow
-            label="Max Speed:"
-            value={maxSpeed}
-            onChange={(e) => setMaxSpeed(parseFloat(e.target.value))}
-            min="1.0"
-            max="4.0"
-            step="0.1"
-          />
-          <SettingRow
-            label="Acceleration:"
-            value={acceleration}
-            onChange={(e) => setAcceleration(parseFloat(e.target.value))}
-            min="0.1"
-            max="2.0"
-            step="0.1"
-          />
         </div>
 
         {/* Hidden Audio Element */}
@@ -248,21 +251,5 @@ const AcceleratingMusicPlayer = () => {
   );
 };
 
-const SettingRow = ({ label, value, onChange, min, max, step }) => {
-  return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm font-bold text-white">{label}</span>
-      <input
-        type="number"
-        value={value}
-        onChange={onChange}
-        min={min}
-        max={max}
-        step={step}
-        className="w-24 px-3 py-2 rounded-lg bg-white/20 text-white text-center border-none focus:outline-none focus:ring-2 focus:ring-teal-400"
-      />
-    </div>
-  );
-};
-
 export default AcceleratingMusicPlayer;
+
